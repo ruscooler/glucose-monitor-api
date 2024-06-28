@@ -1,0 +1,31 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:14.12-alpine
+    container_name: glucose_db
+    restart: always
+    environment:
+      POSTGRES_USER: django-dev
+      POSTGRES_PASSWORD: django-dev
+      POSTGRES_DB: glucose-monitor
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - glucose_network
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+    networks:
+      - glucose_network
+
+volumes:
+  pgdata:
+
+networks:
+  glucose_network:
