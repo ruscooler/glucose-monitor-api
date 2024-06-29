@@ -1,18 +1,23 @@
-import logging
-from datetime import datetime
+from datetime import datetime, tzinfo
+from io import StringIO
+from logging import Logger, getLogger
 from pathlib import Path
 
 import pandas as pd
 import pytz
-from django.core.management.base import BaseCommand
-from django.conf import settings
+from django.core.management.base import BaseCommand, CommandParser, CommandError
+from pandas import DataFrame
+from pandas.io.parsers import TextFileReader
 
 from glucosemonitor.levels.models import Level
+from glucosemonitor import settings
 
-logger = logging.getLogger(__name__)
-default_timezone = pytz.timezone(settings.TIME_ZONE)
+logger: Logger = getLogger(__name__)
 
-COLUMNS = {
+
+default_timezone: tzinfo = pytz.timezone(settings.TIME_ZONE)
+
+COLUMNS: dict = {
     'DEVICE_NAME': 'Gerät',
     'DEVICE_SERIAL_NUMBER': 'Seriennummer',
     'DEVICE_TIMESTAMP': 'Gerätezeitstempel',
@@ -35,10 +40,33 @@ COLUMNS = {
 }
 
 
-class Command(BaseCommand):
-    help = "Load sample data from CSV file intro the Level mode"
+def read_csv_content_and_find_header(csv_file: Path, max_lines: int = 5) -> tuple[StringIO, int]:
+    buffer = []
+    header_row = None
 
-    def add_arguments(self, parser):
+    try:
+        with open(csv_file, 'r') as file:
+            lines = file.readlines()
+            for i, line in enumerate(lines):
+                buffer.append(line)
+                if COLUMNS['DEVICE_NAME'] in line and COLUMNS['DEVICE_SERIAL_NUMBER'] in line:
+                    header_row = i
+                if i >= max_lines and header_row is None:
+                    break
+        if header_row is None:
+            raise ValueError("Unable to find header row in the CSV file.")
+    except Exception as e:
+        logger.error(f"Error reading CSV file: {e}")
+        raise
+
+    stream = StringIO(''.join(buffer))
+    return stream, header_row
+
+
+class Command(BaseCommand):
+    help: str = "Load sample data from CSV file intro the Level mode"
+
+    def add_arguments(self, parser: CommandParser):
         parser.add_argument(
             "csv_file_path",
             type=Path,
@@ -47,79 +75,81 @@ class Command(BaseCommand):
         parser.add_argument(
             "--chunk_size",
             type=int,
-            default=1000,
+            default=10000,
             help="Number of rows to process in each chunk",
         )
 
     def handle(self, *args, **options):
         csv_file_path: Path = options['csv_file_path']
         chunk_size: int = options['chunk_size']
-        objects = []
+        user_id: str = csv_file_path.stem
+        try:
+            stream, header_line = read_csv_content_and_find_header(csv_file_path)
+            pd_chunk_dataframe: TextFileReader = pd.read_csv(
+                stream,
+                chunksize=chunk_size,
+                skiprows=header_line,
+                dtype={
+                    COLUMNS['DEVICE_NAME']: str,
+                    COLUMNS['DEVICE_SERIAL_NUMBER']: str,
+                    COLUMNS['DEVICE_TIMESTAMP']: str,
+                    COLUMNS['RECORDING_TYPE']: str,
+                    COLUMNS['GLUCOSE_HISTORY_MG_DL']: float,
+                    COLUMNS['GLUCOSE_SCAN_MG_DL']: float,
+                    COLUMNS['FAST_ACTING_INSULIN']: str,
+                    COLUMNS['FAST_ACTING_INSULIN_UNITS']: float,
+                    COLUMNS['FOOD_DATA']: str,
+                    COLUMNS['CARBS_GRAMS']: float,
+                    COLUMNS['CARBS_SERVINGS']: float,
+                    COLUMNS['LONG_ACTING_INSULIN']: str,
+                    COLUMNS['LONG_ACTING_INSULIN_UNITS']: float,
+                    COLUMNS['NOTES']: str,
+                    COLUMNS['GLUCOSE_TEST_STRIP_MG_DL']: float,
+                    COLUMNS['KETONE_MMOL_L']: float,
+                    COLUMNS['MEAL_INSULIN_UNITS']: float,
+                    COLUMNS['CORRECTION_INSULIN_UNITS']: float,
+                    COLUMNS['USER_ADJUSTED_INSULIN_UNITS']: float
+                },
+            )
 
-        user_id = csv_file_path.stem
-
-        pd_chunk_dataframe = pd.read_csv(
-            csv_file_path,
-            chunksize=chunk_size,
-            skiprows=2,
-            dtype={
-                COLUMNS['DEVICE_NAME']: str,
-                COLUMNS['DEVICE_SERIAL_NUMBER']: str,
-                COLUMNS['DEVICE_TIMESTAMP']: str,
-                COLUMNS['RECORDING_TYPE']: str,
-                COLUMNS['GLUCOSE_HISTORY_MG_DL']: float,
-                COLUMNS['GLUCOSE_SCAN_MG_DL']: float,
-                COLUMNS['FAST_ACTING_INSULIN']: str,
-                COLUMNS['FAST_ACTING_INSULIN_UNITS']: float,
-                COLUMNS['FOOD_DATA']: str,
-                COLUMNS['CARBS_GRAMS']: float,
-                COLUMNS['CARBS_SERVINGS']: float,
-                COLUMNS['LONG_ACTING_INSULIN']: str,
-                COLUMNS['LONG_ACTING_INSULIN_UNITS']: float,
-                COLUMNS['NOTES']: str,
-                COLUMNS['GLUCOSE_TEST_STRIP_MG_DL']: float,
-                COLUMNS['KETONE_MMOL_L']: float,
-                COLUMNS['MEAL_INSULIN_UNITS']: float,
-                COLUMNS['CORRECTION_INSULIN_UNITS']: float,
-                COLUMNS['USER_ADJUSTED_INSULIN_UNITS']: float
-            },
-        )
-        for chunk in pd_chunk_dataframe:
-            chunk = chunk.replace({float('nan'): None})
-
-            for i, row in chunk.iterrows():
-
-                objects.append(
-                    Level(
-                        user_id=user_id,
-                        device_name=row[COLUMNS['DEVICE_NAME']],
-                        device_serial_number=row[COLUMNS['DEVICE_SERIAL_NUMBER']],
-                        device_timestamp=default_timezone.localize(
-                            datetime.strptime(row[COLUMNS['DEVICE_TIMESTAMP']], "%d-%m-%Y %H:%M")
-                        ),
-                        recording_type=row[COLUMNS['RECORDING_TYPE']],
-                        glucose_history_mg_dl=row.get(COLUMNS['GLUCOSE_HISTORY_MG_DL']),
-                        glucose_scan_mg_dl=row.get(COLUMNS['GLUCOSE_SCAN_MG_DL']),
-                        fast_acting_insulin=row.get(COLUMNS['FAST_ACTING_INSULIN']),
-                        fast_acting_insulin_units=row.get(COLUMNS['FAST_ACTING_INSULIN_UNITS']),
-                        food_data=row.get(COLUMNS['FOOD_DATA']),
-                        carbohydrates_grams=row.get(COLUMNS['CARBS_GRAMS']),
-                        carbohydrates_servings=row.get(COLUMNS['CARBS_SERVINGS']),
-                        long_acting_insulin=row.get(COLUMNS['LONG_ACTING_INSULIN']),
-                        long_acting_insulin_units=row.get(COLUMNS['LONG_ACTING_INSULIN_UNITS']),
-                        notes=row.get(COLUMNS['NOTES']),
-                        glucose_test_strip_mg_dl=row.get(COLUMNS['GLUCOSE_TEST_STRIP_MG_DL']),
-                        ketone_mmol_l=row.get(COLUMNS['KETONE_MMOL_L']),
-                        meal_insulin_units=row.get(COLUMNS['MEAL_INSULIN_UNITS']),
-                        correction_insulin_units=row.get(COLUMNS['CORRECTION_INSULIN_UNITS']),
-                        user_adjusted_insulin_units=row.get(COLUMNS['USER_ADJUSTED_INSULIN_UNITS'])
+            objects = []
+            chunk_df: DataFrame
+            for chunk_df in pd_chunk_dataframe:
+                chunk_df = chunk_df.replace({float('nan'): None})
+                for i, row in chunk_df.iterrows():
+                    objects.append(
+                        Level(
+                            user_id=user_id,
+                            device_name=row[COLUMNS['DEVICE_NAME']],
+                            device_serial_number=row[COLUMNS['DEVICE_SERIAL_NUMBER']],
+                            device_timestamp=default_timezone.localize(
+                                datetime.strptime(row[COLUMNS['DEVICE_TIMESTAMP']], "%d-%m-%Y %H:%M")
+                            ),
+                            recording_type=row[COLUMNS['RECORDING_TYPE']],
+                            glucose_history_mg_dl=row.get(COLUMNS['GLUCOSE_HISTORY_MG_DL']),
+                            glucose_scan_mg_dl=row.get(COLUMNS['GLUCOSE_SCAN_MG_DL']),
+                            fast_acting_insulin=row.get(COLUMNS['FAST_ACTING_INSULIN']),
+                            fast_acting_insulin_units=row.get(COLUMNS['FAST_ACTING_INSULIN_UNITS']),
+                            food_data=row.get(COLUMNS['FOOD_DATA']),
+                            carbohydrates_grams=row.get(COLUMNS['CARBS_GRAMS']),
+                            carbohydrates_servings=row.get(COLUMNS['CARBS_SERVINGS']),
+                            long_acting_insulin=row.get(COLUMNS['LONG_ACTING_INSULIN']),
+                            long_acting_insulin_units=row.get(COLUMNS['LONG_ACTING_INSULIN_UNITS']),
+                            notes=row.get(COLUMNS['NOTES']),
+                            glucose_test_strip_mg_dl=row.get(COLUMNS['GLUCOSE_TEST_STRIP_MG_DL']),
+                            ketone_mmol_l=row.get(COLUMNS['KETONE_MMOL_L']),
+                            meal_insulin_units=row.get(COLUMNS['MEAL_INSULIN_UNITS']),
+                            correction_insulin_units=row.get(COLUMNS['CORRECTION_INSULIN_UNITS']),
+                            user_adjusted_insulin_units=row.get(COLUMNS['USER_ADJUSTED_INSULIN_UNITS'])
+                        )
                     )
-                )
-
-            if len(objects) >= chunk_size:
+                if len(objects) >= chunk_size:
+                    Level.objects.bulk_create(objects)
+                    objects.clear()
+            if objects:
                 Level.objects.bulk_create(objects)
-                objects.clear()
-        if objects:
-            Level.objects.bulk_create(objects)
+        except Exception as e:
+            logger.error(f"Failed to import data from {csv_file_path}: {e}")
+            raise CommandError(f"Failed to import data from {csv_file_path}: {e}")
 
-        print('Successfully imported data from {}'.format(csv_file_path))
+        print(f"Successfully imported data from {csv_file_path}")
