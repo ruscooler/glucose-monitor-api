@@ -17,6 +17,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+from glucosemonitor.levels.views import LevelListView, LevelDetailView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/v1/levels/', LevelListView.as_view(), name='level-list'),
+    path('api/v1/levels/<int:pk>/', LevelDetailView.as_view(), name='level-detail'),
 ]
