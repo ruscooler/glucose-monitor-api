@@ -15,6 +15,11 @@ pandas = "^2.2.2"
 django-filter = "^24.2"
 
 
+[tool.poetry.group.dev.dependencies]
+pytest-django = "^4.8.0"
+pytest = "^8.2.2"
+faker = "^26.0.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
