@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 from decouple import config
 
@@ -136,3 +136,5 @@ REST_FRAMEWORK = {
     ),
     'PAGE_SIZE': 20
 }
+
+MEDIA_ROOT = os.path.join(os.path.dirname(BASE_DIR), 'uploads')
