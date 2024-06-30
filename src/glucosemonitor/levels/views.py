@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 
+import pandas as pd
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.http import JsonResponse, HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, mixins, permissions, status
 from rest_framework.filters import OrderingFilter
@@ -24,7 +26,32 @@ class LevelListView(generics.GenericAPIView, mixins.ListModelMixin):
     ordering_fields = ['glucose_history_mg_dl', 'glucose_scan_mg_dl', "device_timestamp"]
 
     def get(self, request, *args, **kwargs):
+        format_export = request.query_params.get('export')
+        if format_export:
+            return self.handle_export(request, format_export)
         return self.list(request, *args, **kwargs)
+
+    def handle_export(self, request, format_):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        data = serializer.data
+
+        if format_ == 'json':
+            return self.export_json(data)
+        elif format_ == 'csv':
+            return self.export_csv(data)
+        else:
+            return Response({"detail": "Invalid export format"}, status=status.HTTP_400_BAD_REQUEST)
+
+    def export_json(self, data):
+        return JsonResponse(data, safe=False, json_dumps_params={'indent': 2})
+
+    def export_csv(self, data):
+        df = pd.DataFrame(data)
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="levels.csv"'
+        df.to_csv(path_or_buf=response, index=False)
+        return response
 
 
 class LevelDetailView(generics.GenericAPIView, mixins.RetrieveModelMixin):
