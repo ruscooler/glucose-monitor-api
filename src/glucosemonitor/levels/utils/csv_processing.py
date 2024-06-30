@@ -58,7 +58,6 @@ def read_csv_content_and_find_header(csv_file: Path, max_lines: int = 20) -> tup
         logger.error(f"Error reading CSV file: {e}")
         raise
 
-    print(f"{header_row = }")
     stream = StringIO(''.join(buffer))
     return stream, header_row
 
