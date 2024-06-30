@@ -13,9 +13,10 @@ from glucosemonitor.levels.models import Level
 
 logger: Logger = getLogger(__name__)
 
-
+# Set the default timezone based on the project settings
 default_timezone: tzinfo = pytz.timezone(settings.TIME_ZONE)
 
+# Define a mapping from CSV column names to the expected column names in the csv file
 COLUMNS: dict = {
     'DEVICE_NAME': 'Gerät',
     'DEVICE_SERIAL_NUMBER': 'Seriennummer',
@@ -40,6 +41,19 @@ COLUMNS: dict = {
 
 
 def read_csv_content_and_find_header(csv_file: Path, max_lines: int = 20) -> tuple[StringIO, int]:
+    """
+    Reads the content of a CSV file and identifies the header row.
+
+    Args:
+        csv_file (Path): The path to the CSV file.
+        max_lines (int): The maximum number of lines to read to find the header row.
+
+    Returns:
+        tuple[StringIO, int]: A tuple containing a StringIO stream of the CSV content and the header row index.
+
+    Raises:
+        ValueError: If the header row cannot be found.
+    """
     buffer = []
     header_row = None
 
@@ -48,8 +62,10 @@ def read_csv_content_and_find_header(csv_file: Path, max_lines: int = 20) -> tup
             lines: str = file.readlines()
             for i, line in enumerate(lines):
                 buffer.append(line)
+                # Check if the line contains the required columns
                 if COLUMNS['DEVICE_NAME'] in line and COLUMNS['DEVICE_SERIAL_NUMBER'] in line:
                     header_row = i
+                # Stop reading if the header row is not found within max_lines
                 if i >= max_lines and header_row is None:
                     break
         if header_row is None:
@@ -63,6 +79,14 @@ def read_csv_content_and_find_header(csv_file: Path, max_lines: int = 20) -> tup
 
 
 def process_csv_file(csv_file_path: Path, user_id: str, chunk_size: int = 10000):
+    """
+    Processes a CSV file and loads the data into the Level model.
+
+    Args:
+        csv_file_path (Path): The path to the CSV file.
+        user_id (str): The ID of the user.
+        chunk_size (int, optional): The number of rows to process in each chunk. Defaults to 10000.
+    """
     try:
         stream, header_line = read_csv_content_and_find_header(csv_file_path)
         pd_chunk_dataframe: TextFileReader = pd.read_csv(
@@ -95,6 +119,7 @@ def process_csv_file(csv_file_path: Path, user_id: str, chunk_size: int = 10000)
         objects = []
         chunk_df: DataFrame
         for chunk_df in pd_chunk_dataframe:
+            # Replace NaN values with None
             chunk_df = chunk_df.replace({float('nan'): None})
             for i, row in chunk_df.iterrows():
                 objects.append(
@@ -102,6 +127,7 @@ def process_csv_file(csv_file_path: Path, user_id: str, chunk_size: int = 10000)
                         user_id=user_id,
                         device_name=row[COLUMNS['DEVICE_NAME']],
                         device_serial_number=row[COLUMNS['DEVICE_SERIAL_NUMBER']],
+                        # Convert device timestamp to localized datetime object
                         device_timestamp=default_timezone.localize(
                             datetime.strptime(row[COLUMNS['DEVICE_TIMESTAMP']], "%d-%m-%Y %H:%M")
                         ),
@@ -123,9 +149,11 @@ def process_csv_file(csv_file_path: Path, user_id: str, chunk_size: int = 10000)
                         user_adjusted_insulin_units=row.get(COLUMNS['USER_ADJUSTED_INSULIN_UNITS'])
                     )
                 )
+            # Bulk create Level objects in the database
             if len(objects) >= chunk_size:
                 Level.objects.bulk_create(objects)
                 objects.clear()
+        # Create any remaining Level objects
         if objects:
             Level.objects.bulk_create(objects)
     except Exception as e:

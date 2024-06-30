@@ -9,7 +9,7 @@ logger: Logger = getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help: str = "Load sample data from CSV file intro the Level mode"
+    help: str = "Load sample data from CSV file intro the Level model"
 
     def add_arguments(self, parser: CommandParser):
         parser.add_argument(

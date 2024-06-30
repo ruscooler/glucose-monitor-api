@@ -1,14 +1,22 @@
+from typing import Optional
+
 from django.db import models
 
 
 class Level(models.Model):
+    """
+    Model to store glucose levels and related data for users.
+    """
 
     class RecordingType(models.TextChoices):
-        HISTORY = "history"
-        SCAN = "scan"
+        """
+        Choices for the type of glucose recording.
+        """
+        HISTORY: str = "history"
+        SCAN: str = "scan"
 
         @classmethod
-        def get_type_by_int_value(cls, value: int):
+        def get_type_by_int_value(cls, value: int) -> Optional[str]:
             return {
                 0: cls.HISTORY,
                 1: cls.SCAN,
