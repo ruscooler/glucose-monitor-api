@@ -101,6 +101,7 @@ class LevelUploadView(APIView):
     API view to handle CSV file uploads for glucose level data.
     """
     serializer_class = LevelCSVDataUploadSerializer
+    permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, request, *args, **kwargs):
         serializer = LevelCSVDataUploadSerializer(data=request.data)
