@@ -48,6 +48,21 @@ curl -X POST -F "file=@path_to_file.csv" "http://127.0.0.1:8000/api/v1/levels/up
 ```
     
 
+### Retrieve minimal and maximum glucose levels
+
+- **URL:** `/api/v1/levels/aggregates/minmax/`
+- **Method:** `GET`
+- **Description:** Retrieve minimal and maximum glucose levels for  a given `user_id`, with optional filtering by `start` and `stop` timestamps. 
+- **Parameters:**
+  - `user_id` (UUID, required)
+  - `start` (DateTime, optional)
+  - `stop` (DateTime, optional)
+- **Example Request:**
+    
+```bash
+curl -X GET "http://127.0.0.1:8000/api/v1/levels/aggregates/minmax/?user_id=<user_uuid>&start=2023-01-01T00:00:00Z&stop=2023-01-31T23:59:59Z"
+```
+
 ## Commands
 
 ### Load Sample Data from CSV

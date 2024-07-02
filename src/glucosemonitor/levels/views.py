@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from glucosemonitor.levels.filters import LevelFilter
 from glucosemonitor.levels.models import Level
-from glucosemonitor.levels.serializers import LevelSerializer, LevelCSVDataUploadSerializer
+from glucosemonitor.levels.serializers import LevelSerializer, LevelCSVDataUploadSerializer, LevelMinMaxSerializer
 from glucosemonitor.levels.utils.csv_processing import process_csv_file
 
 
@@ -121,3 +121,28 @@ class LevelUploadView(APIView):
             if tmp_file.exists():
                 os.remove(tmp_file)
         return Response({"detail": "File processed successfully"}, status=status.HTTP_201_CREATED)
+
+
+class MinMaxLevelView(generics.RetrieveAPIView):
+    permission_classes = (permissions.IsAuthenticated,)
+    filter_backends = (DjangoFilterBackend, )
+    filterset_class = LevelFilter
+    serializer_class = LevelMinMaxSerializer
+    queryset = Level.objects.all()
+
+    def get(self, *args, **kwargs):
+        user_id = self.request.query_params['user_id']
+        if not user_id:
+            return Response({"detail": "user_id is required"}, status=status.HTTP_200_OK)
+
+        filterset = LevelFilter(self.request.query_params, queryset=self.queryset)
+        if not filterset.is_valid():
+            return Response(filterset.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        aggregation_result = Level.objects.get_min_max_aggregation(filterset.qs)
+
+        if not aggregation_result.exists():
+            return Response({"detail": "No data found for this user"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = LevelMinMaxSerializer(aggregation_result[0])
+        return Response(serializer.data, status=status.HTTP_200_OK)

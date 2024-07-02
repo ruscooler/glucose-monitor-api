@@ -20,3 +20,9 @@ class LevelSerializer(serializers.ModelSerializer):
 
 class LevelCSVDataUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
+
+
+class LevelMinMaxSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField()
+    glucose_level_min = serializers.FloatField()
+    glucose_level_max = serializers.FloatField()

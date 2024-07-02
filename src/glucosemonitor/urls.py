@@ -17,11 +17,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-from glucosemonitor.levels.views import LevelListView, LevelDetailView, LevelUploadView
+from glucosemonitor.levels.views import LevelListView, LevelDetailView, LevelUploadView, MinMaxLevelView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/levels/', LevelListView.as_view(), name='level-list'),
+    path('api/v1/levels/aggregates/minmax/', MinMaxLevelView.as_view(), name='level-maximum'),
     path('api/v1/levels/<int:pk>/', LevelDetailView.as_view(), name='level-detail'),
     path('api/v1/levels/upload/', LevelUploadView.as_view(), name='level-upload')
 ]
